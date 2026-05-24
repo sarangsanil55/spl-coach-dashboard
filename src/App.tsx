@@ -43,12 +43,12 @@ function mapSheetClient(raw) {
     complianceScore: compliance,
     stress:    0, sleep: 0, energy: 0, fatigue: 0,
     nutrition: 0, training: 0, steps: 0,
-    weight:      [],
+    weight:      Array.isArray(raw.WEIGHT_HISTORY) ? raw.WEIGHT_HISTORY : [],
     waist:       [],
     tag,
     flag,
-    lastCheckin: raw.LAST_CHECKIN || "",
-    notes:       raw.COACH_NOTES  || "",
+    lastCheckin: raw.LAST_CHECKIN || raw.LATEST_CHECKIN_DATE || "",
+    notes:       raw.LATEST_CLIENT_NOTES || "",
   };
 }
 
