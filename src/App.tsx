@@ -1,6 +1,5 @@
 import { useState } from 'react';
-const DEPLOYMENT_URL =
-  'https://script.google.com/macros/s/AKfycbz_U6a1deVdAQ3N4yQ-BVVcWMlvQK6ELbsR6v0n4uKZ7hslizg8weGZvjZrJs6X5lg_dQ/exec';
+const DEPLOYMENT_URL = "https://script.google.com/macros/s/AKfycbz_U6a1deVdAQ3N4yQ-BVVcWMIvQK6ELbsR6v0n4uKZ7hslizg8weGZvjZrJs6X5Ig_dQ/exec";
 const SPL_TEAL = '#1D9E75';
 const SPL_TEAL_LIGHT = '#E1F5EE';
 const SPL_AMBER = '#BA7517';
@@ -10,122 +9,14 @@ const SPL_CORAL_LIGHT = '#FAECE7';
 const SPL_BLUE = '#378ADD';
 const SPL_BLUE_LIGHT = '#E6F1FB';
 
-const CLIENTS = [
-  {
-    id: 'SPL-001',
-    name: 'Arjun Mehta',
-    age: 34,
-    goal: 'Recomposition',
-    weeks: 6,
-    stateScore: 7.2,
-    complianceScore: 8.5,
-    stress: 6,
-    sleep: 7,
-    energy: 8,
-    fatigue: 5,
-    nutrition: 9,
-    training: 8,
-    steps: 8,
-    weight: [84.2, 83.8, 83.5, 83.1, 82.9, 82.4],
-    waist: [91, 90.5, 90, 89.5, 89, 88.2],
-    tag: 'on-track',
-    lastCheckin: '2025-04-12',
-    notes:
-      'Trending well. Stress elevated mid-week due to work. Monitor energy next week.',
-    flag: null,
-  },
-  {
-    id: 'SPL-002',
-    name: 'Priya Sharma',
-    age: 29,
-    goal: 'Fat loss',
-    weeks: 4,
-    stateScore: 5.8,
-    complianceScore: 6.1,
-    stress: 8,
-    sleep: 5,
-    energy: 5,
-    fatigue: 8,
-    nutrition: 6,
-    training: 6,
-    steps: 6,
-    weight: [67.1, 67.0, 66.9, 67.0],
-    waist: [78, 78, 77.5, 77.5],
-    tag: 'needs-attention',
-    lastCheckin: '2025-04-11',
-    notes:
-      'Plateau in weight. High stress, poor sleep. Consider reducing training load.',
-    flag: 'High stress + poor sleep — review programming',
-  },
-  {
-    id: 'SPL-003',
-    name: 'Rahul Nair',
-    age: 42,
-    goal: 'Muscle gain',
-    weeks: 10,
-    stateScore: 8.1,
-    complianceScore: 9.0,
-    stress: 3,
-    sleep: 8,
-    energy: 9,
-    fatigue: 3,
-    nutrition: 9,
-    training: 9,
-    steps: 9,
-    weight: [76.0, 76.4, 76.9, 77.2, 77.5, 77.8, 78.1, 78.3, 78.6, 78.9],
-    waist: [84, 84, 84.2, 84.1, 84, 83.9, 83.8, 83.7, 83.6, 83.5],
-    tag: 'excellent',
-    lastCheckin: '2025-04-12',
-    notes:
-      'Consistent progression. Strength up across all lifts. Keep current programming.',
-    flag: null,
-  },
-  {
-    id: 'SPL-004',
-    name: 'Divya Krishnan',
-    age: 38,
-    goal: 'Health & longevity',
-    weeks: 3,
-    stateScore: 6.9,
-    complianceScore: 7.5,
-    stress: 5,
-    sleep: 7,
-    energy: 7,
-    fatigue: 5,
-    nutrition: 8,
-    training: 7,
-    steps: 7,
-    weight: [72.5, 72.2, 71.9],
-    waist: [82, 81.5, 81],
-    tag: 'on-track',
-    lastCheckin: '2025-04-10',
-    notes:
-      'Good start. Building habits. Gut health concerns flagged at intake — check in.',
-    flag: null,
-  },
-  {
-    id: 'SPL-005',
-    name: 'Vikram Iyer',
-    age: 31,
-    goal: 'Athletic performance',
-    weeks: 8,
-    stateScore: 4.8,
-    complianceScore: 5.5,
-    stress: 9,
-    sleep: 4,
-    energy: 4,
-    fatigue: 9,
-    nutrition: 5,
-    training: 6,
-    steps: 5,
-    weight: [82.0, 82.1, 81.9, 81.8, 82.0, 82.1, 82.0, 81.9],
-    waist: [86, 86, 85.8, 85.5, 85.6, 85.5, 85.4, 85.3],
-    tag: 'at-risk',
-    lastCheckin: '2025-04-09',
-    notes: 'Signs of burnout. Consider deload week. Address sleep immediately.',
-    flag: 'Burnout indicators — schedule check-in call',
-  },
-];
+const [CLIENTS, setCLIENTS] = useState([]);
+
+useEffect(() => {
+  fetch(`${DEPLOYMENT_URL}?action=getAllClients`)
+    .then(r => r.json())
+    .then(data => setCLIENTS(Array.isArray(data) ? data : []))
+    .catch(err => console.error("Failed:", err));
+}, []);
 
 const TAG_CONFIG = {
   excellent: { label: 'Excellent', bg: SPL_TEAL_LIGHT, color: SPL_TEAL },
