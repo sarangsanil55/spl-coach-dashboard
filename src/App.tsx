@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const DEPLOYMENT_URL = "https://script.google.com/macros/s/AKfycbxBMB_2WWb-CaFYjHh3vKhCkEwbCCpD1GWZiI6tkb4E6uS-XolxqoS8pVAJH46n-_w_5w/exec";
+const DEPLOYMENT_URL = "https://script.google.com/macros/s/AKfycbyKH2bSwGNk1FpopoeR2apF90S8uXj97fuAWcbBMEQOPAxVxrqpDZG3L-8td3aBXhcHNg/exec";
 
 const SPL_TEAL = "#1D9E75";
 const SPL_TEAL_LIGHT = "#E1F5EE";
