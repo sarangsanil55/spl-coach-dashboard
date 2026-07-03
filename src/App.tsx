@@ -33,8 +33,14 @@ function mapSheetClient(raw) {
   const flag = burnout ? burnout + (plateau ? " | " + plateau : "") :
                plateau ? plateau : null;
 
+  // Seed weight from intake baseline if no check-in weight history yet
+  const intakeWeight = parseFloat(raw.CURRENT_WEIGHT);
+  const weightHistory = Array.isArray(raw.WEIGHT_HISTORY) && raw.WEIGHT_HISTORY.length > 0
+    ? (intakeWeight ? [intakeWeight, ...raw.WEIGHT_HISTORY] : raw.WEIGHT_HISTORY)
+    : (intakeWeight ? [intakeWeight] : []);
+
   return {
-    id:              raw.CLIENT_ID      || "",
+    id:              raw.CLIENT_ID || raw.s || "",
     name:            raw.FULL_NAME      || "",
     age:             raw.AGE            || "",
     goal:            raw.PRIMARY_GOAL   || "",
@@ -43,12 +49,12 @@ function mapSheetClient(raw) {
     complianceScore: compliance,
     stress:    0, sleep: 0, energy: 0, fatigue: 0,
     nutrition: 0, training: 0, steps: 0,
-    weight:      Array.isArray(raw.WEIGHT_HISTORY) ? raw.WEIGHT_HISTORY : [],
+    weight:      weightHistory,
     waist:       [],
     tag,
     flag,
     lastCheckin: raw.LAST_CHECKIN || raw.LATEST_CHECKIN_DATE || "",
-    notes:       raw.LATEST_CLIENT_NOTES || "",
+    notes:       raw.COACH_NOTES  || "",
   };
 }
 
