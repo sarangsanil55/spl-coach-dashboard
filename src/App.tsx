@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const DEPLOYMENT_URL = "https://script.google.com/macros/s/AKfycbyKH2bSwGNk1FpopoeR2apF90S8uXj97fuAWcbBMEQOPAxVxrqpDZG3L-8td3aBXhcHNg/exec";
+const DEPLOYMENT_URL = "https://script.google.com/macros/s/AKfycbzwS67PFao6bZYUmIYemCgJJIkF6WbVxHwzw83meuXh9qni2hJRSPlB8ZraQtJspe0yRw/exec";
 
 const SPL_TEAL = "#1D9E75";
 const SPL_TEAL_LIGHT = "#E1F5EE";
@@ -12,49 +12,83 @@ const SPL_BLUE = "#378ADD";
 const SPL_BLUE_LIGHT = "#E6F1FB";
 
 const TAG_CONFIG = {
-  "excellent":       { label: "Excellent",      bg: SPL_TEAL_LIGHT,  color: SPL_TEAL },
-  "on-track":        { label: "On track",        bg: SPL_BLUE_LIGHT,  color: SPL_BLUE },
+  "excellent":       { label: "Excellent",      bg: SPL_TEAL_LIGHT,  color: SPL_TEAL  },
+  "on-track":        { label: "On track",        bg: SPL_BLUE_LIGHT,  color: SPL_BLUE  },
   "needs-attention": { label: "Needs attention", bg: SPL_AMBER_LIGHT, color: SPL_AMBER },
   "at-risk":         { label: "At risk",         bg: SPL_CORAL_LIGHT, color: SPL_CORAL },
 };
 
-// Map raw sheet row to the shape the dashboard expects
+// Helper: reads field with either underscore or space format
+// Handles both "FULL_NAME" and "FULL NAME" header formats
+function g(raw, key) {
+  return raw[key] || raw[key.replace(/_/g, " ")] || "";
+}
+
 function mapSheetClient(raw) {
-  const state      = parseFloat(raw.LATEST_STATE_SCORE)      || 0;
-  const compliance = parseFloat(raw.LATEST_COMPLIANCE_SCORE) || 0;
-  const burnout    = raw.BURNOUT_INDICATOR || "";
-  const plateau    = raw.PLATEAU_FLAG      || "";
+  const state      = parseFloat(g(raw, "LATEST_STATE_SCORE"))      || 0;
+  const compliance = parseFloat(g(raw, "LATEST_COMPLIANCE_SCORE")) || 0;
+  const burnout    = g(raw, "BURNOUT_INDICATOR");
+  const plateau    = g(raw, "PLATEAU_FLAG");
 
   let tag = "on-track";
   if (burnout.includes("HIGH") || plateau) tag = "at-risk";
   else if (burnout.includes("WARNING"))    tag = "needs-attention";
   else if (state >= 8 && compliance >= 8)  tag = "excellent";
 
-  const flag = burnout ? burnout + (plateau ? " | " + plateau : "") :
-               plateau ? plateau : null;
+  const flag = burnout
+    ? burnout + (plateau ? " | " + plateau : "")
+    : plateau ? plateau : null;
 
-  // Seed weight from intake baseline if no check-in weight history yet
-  const intakeWeight = parseFloat(raw.CURRENT_WEIGHT);
+  // Seed weight sparkline with intake baseline if no check-in history
+  const intakeWeight  = parseFloat(g(raw, "CURRENT_WEIGHT"));
   const weightHistory = Array.isArray(raw.WEIGHT_HISTORY) && raw.WEIGHT_HISTORY.length > 0
     ? (intakeWeight ? [intakeWeight, ...raw.WEIGHT_HISTORY] : raw.WEIGHT_HISTORY)
     : (intakeWeight ? [intakeWeight] : []);
 
   return {
-    id:              raw.CLIENT_ID || raw.s || "",
-    name:            raw.FULL_NAME      || "",
-    age:             raw.AGE            || "",
-    goal:            raw.PRIMARY_GOAL   || "",
-    weeks:           Number(raw.TOTAL_WEEKS) || 0,
+    id:              g(raw, "CLIENT_ID"),
+    name:            g(raw, "FULL_NAME"),
+    age:             g(raw, "AGE"),
+    gender:          g(raw, "GENDER"),
+    goal:            g(raw, "PRIMARY_GOAL"),
+    weeks:           Number(g(raw, "TOTAL_WEEKS")) || 0,
+    joinDate:        g(raw, "JOIN_DATE"),
     stateScore:      state,
     complianceScore: compliance,
-    stress:    0, sleep: 0, energy: 0, fatigue: 0,
+    stress: 0, sleep: 0, energy: 0, fatigue: 0,
     nutrition: 0, training: 0, steps: 0,
     weight:      weightHistory,
     waist:       [],
     tag,
     flag,
-    lastCheckin: raw.LAST_CHECKIN || raw.LATEST_CHECKIN_DATE || "",
-    notes:       raw.COACH_NOTES  || "",
+    lastCheckin:  g(raw, "LAST_CHECKIN") || g(raw, "LATEST_CHECKIN_DATE"),
+    notes:        g(raw, "LATEST_CLIENT_NOTES"),
+    dashboardUrl: g(raw, "DASHBOARD_URL"),
+    // Body measurements (inches)
+    measurements: {
+      waist: g(raw, "WAIST_IN"),
+      hip:   g(raw, "HIP_IN"),
+      quad:  g(raw, "QUAD_IN"),
+      neck:  g(raw, "NECK_IN"),
+      chest: g(raw, "CHEST_IN"),
+      arms:  g(raw, "ARMS_IN"),
+    },
+    picturesUrl:   g(raw, "PROGRESS_PICTURES_URL"),
+    bloodworkUrl:  g(raw, "BLOOD_WORK_UPLOAD_URL"),
+    // Intake profile
+    intakeProfile: {
+      stressLevel:      g(raw, "STRESS_LEVEL"),
+      sleepQuality:     g(raw, "SLEEP_QUALITY"),
+      energyLevel:      g(raw, "ENERGY_LEVEL"),
+      fatigueLevel:     g(raw, "FATIGUE_LEVEL"),
+      consistency:      g(raw, "CONSISTENCY_LEVEL"),
+      medications:      g(raw, "MEDICATIONS"),
+      medicalConditions: g(raw, "MEDICAL_CONDITIONS"),
+      pastInjuries:     g(raw, "PAST_INJURIES"),
+      currentPain:      g(raw, "CURRENT_PAIN"),
+      currentWeight:    g(raw, "CURRENT_WEIGHT"),
+      waistCm:          g(raw, "WAIST_MEASUREMENT"),
+    },
   };
 }
 
@@ -91,40 +125,188 @@ function MiniSparkLine({ data, color }) {
 }
 
 function ClientDetail({ client, onClose }) {
+  const [tab, setTab] = useState("scores");
   const weightDelta = client.weight.length > 1
     ? client.weight[client.weight.length - 1] - client.weight[0] : 0;
+
+  const hasMeasurements = client.measurements &&
+    Object.values(client.measurements).some(v => v);
+
   return (
     <div style={{ background: "var(--color-background-primary)", border: "0.5px solid var(--color-border-tertiary)", borderRadius: "var(--border-radius-lg)", padding: "20px", marginTop: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
         <div>
           <p style={{ fontSize: 16, fontWeight: 500, margin: "0 0 2px" }}>{client.name}</p>
-          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: 0 }}>{client.id} · {client.goal} · Week {client.weeks}</p>
+          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: 0 }}>
+            {client.id} · {client.goal || "—"} · Week {client.weeks}
+          </p>
         </div>
-        <button onClick={onClose} style={{ fontSize: 13, padding: "4px 10px" }}>✕ Close</button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {client.dashboardUrl && (
+            <a href={client.dashboardUrl} target="_blank" rel="noreferrer"
+              style={{ fontSize: 12, color: SPL_TEAL, textDecoration: "none", padding: "4px 10px", border: `0.5px solid ${SPL_TEAL}`, borderRadius: "var(--border-radius-md)" }}>
+              View dashboard ↗
+            </a>
+          )}
+          <button onClick={onClose} style={{ fontSize: 13, padding: "4px 10px" }}>✕</button>
+        </div>
       </div>
 
+      {/* Flag */}
       {client.flag && (
         <div style={{ background: SPL_CORAL_LIGHT, color: SPL_CORAL, border: `0.5px solid ${SPL_CORAL}`, borderRadius: "var(--border-radius-md)", padding: "8px 12px", fontSize: 13, marginBottom: 14, fontWeight: 500 }}>
           ⚑ {client.flag}
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 16 }}>
-        {[
-          { l: "State score",  v: <ScoreBadge value={client.stateScore} /> },
-          { l: "Compliance",   v: <ScoreBadge value={client.complianceScore} /> },
-          { l: "Weight Δ",     v: <span style={{ fontSize: 13, fontWeight: 500, color: weightDelta < 0 ? SPL_TEAL : weightDelta > 0 ? SPL_CORAL : "var(--color-text-secondary)" }}>{weightDelta > 0 ? "+" : ""}{weightDelta.toFixed(1)} kg</span> },
-        ].map(item => (
-          <div key={item.l} style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "10px 12px" }}>
-            <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "0 0 4px" }}>{item.l}</p>
-            {item.v}
-          </div>
+      {/* Inner tabs */}
+      <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: "0.5px solid var(--color-border-tertiary)" }}>
+        {["scores", "measurements", "profile"].map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{
+            background: "none", border: "none",
+            borderBottom: tab === t ? `2px solid ${SPL_TEAL}` : "2px solid transparent",
+            color: tab === t ? SPL_TEAL : "var(--color-text-secondary)",
+            fontWeight: tab === t ? 500 : 400,
+            fontSize: 13, padding: "6px 14px", cursor: "pointer",
+            textTransform: "capitalize", marginBottom: -1,
+          }}>
+            {t}
+          </button>
         ))}
       </div>
 
-      {client.notes && (
-        <div style={{ fontSize: 13, color: "var(--color-text-secondary)", padding: "10px 12px", background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", lineHeight: 1.5, borderLeft: `3px solid ${SPL_TEAL}` }}>
-          <strong style={{ color: "var(--color-text-primary)", fontWeight: 500 }}>Coach note:</strong> {client.notes}
+      {/* SCORES TAB */}
+      {tab === "scores" && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
+            {[
+              { l: "State score",  v: <ScoreBadge value={client.stateScore} /> },
+              { l: "Compliance",   v: <ScoreBadge value={client.complianceScore} /> },
+              { l: "Weight Δ",     v: <span style={{ fontSize: 13, fontWeight: 500, color: weightDelta < 0 ? SPL_TEAL : weightDelta > 0 ? SPL_CORAL : "var(--color-text-secondary)" }}>{weightDelta !== 0 ? (weightDelta > 0 ? "+" : "") + weightDelta.toFixed(1) + " kg" : "—"}</span> },
+            ].map(item => (
+              <div key={item.l} style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "10px 12px" }}>
+                <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "0 0 4px" }}>{item.l}</p>
+                {item.v}
+              </div>
+            ))}
+          </div>
+          {client.notes && (
+            <div style={{ fontSize: 13, color: "var(--color-text-secondary)", padding: "10px 12px", background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", lineHeight: 1.5, borderLeft: `3px solid ${SPL_TEAL}` }}>
+              <strong style={{ color: "var(--color-text-primary)", fontWeight: 500 }}>Latest note:</strong> {client.notes}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MEASUREMENTS TAB */}
+      {tab === "measurements" && (
+        <div>
+          {/* Intake measurements in inches */}
+          <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
+            Body measurements — intake (inches)
+          </p>
+          {hasMeasurements ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 16 }}>
+              {[
+                { l: "Waist", v: client.measurements.waist },
+                { l: "Hip",   v: client.measurements.hip   },
+                { l: "Quad",  v: client.measurements.quad  },
+                { l: "Neck",  v: client.measurements.neck  },
+                { l: "Chest", v: client.measurements.chest },
+                { l: "Arms",  v: client.measurements.arms  },
+              ].map(item => (
+                <div key={item.l} style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "10px 12px", textAlign: "center" }}>
+                  <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "0 0 4px" }}>{item.l}</p>
+                  <p style={{ fontSize: 16, fontWeight: 500, margin: 0 }}>
+                    {item.v ? item.v + '"' : <span style={{ color: "var(--color-text-tertiary)" }}>—</span>}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: "var(--color-text-secondary)", padding: "16px", textAlign: "center", background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", marginBottom: 16 }}>
+              No measurements submitted yet
+            </div>
+          )}
+
+          {/* Intake weight/waist in cm */}
+          <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
+            Weight & waist — intake
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+            <div style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "10px 12px", textAlign: "center" }}>
+              <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "0 0 4px" }}>Weight</p>
+              <p style={{ fontSize: 16, fontWeight: 500, margin: 0 }}>
+                {client.intakeProfile.currentWeight ? client.intakeProfile.currentWeight + " kg" : "—"}
+              </p>
+            </div>
+            <div style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "10px 12px", textAlign: "center" }}>
+              <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "0 0 4px" }}>Waist</p>
+              <p style={{ fontSize: 16, fontWeight: 500, margin: 0 }}>
+                {client.intakeProfile.waistCm ? client.intakeProfile.waistCm + " cm" : "—"}
+              </p>
+            </div>
+          </div>
+
+          {/* Progress pictures */}
+          {client.picturesUrl && (
+            <div style={{ marginBottom: 12 }}>
+              <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", margin: "0 0 8px" }}>
+                Progress pictures
+              </p>
+              <a href={client.picturesUrl} target="_blank" rel="noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, background: SPL_TEAL_LIGHT, color: SPL_TEAL, padding: "8px 14px", borderRadius: "var(--border-radius-md)", textDecoration: "none", fontSize: 13, fontWeight: 500 }}>
+                📷 View progress pictures →
+              </a>
+            </div>
+          )}
+
+          {/* Blood work */}
+          {client.bloodworkUrl && (
+            <div>
+              <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", margin: "0 0 8px" }}>
+                Blood work report
+              </p>
+              <a href={client.bloodworkUrl} target="_blank" rel="noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, background: SPL_BLUE_LIGHT, color: SPL_BLUE, padding: "8px 14px", borderRadius: "var(--border-radius-md)", textDecoration: "none", fontSize: 13, fontWeight: 500 }}>
+                🩸 View blood work →
+              </a>
+            </div>
+          )}
+
+          {!client.picturesUrl && !client.bloodworkUrl && !hasMeasurements && (
+            <p style={{ fontSize: 13, color: "var(--color-text-tertiary)", textAlign: "center", marginTop: 8 }}>
+              No files uploaded yet
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* PROFILE TAB */}
+      {tab === "profile" && (
+        <div>
+          {[
+            { l: "Age",               v: client.age           },
+            { l: "Gender",            v: client.gender        },
+            { l: "Goal",              v: client.goal          },
+            { l: "Joined",            v: String(client.joinDate).split("T")[0] },
+            { l: "Stress (intake)",   v: client.intakeProfile.stressLevel   ? client.intakeProfile.stressLevel + " / 10"   : "—" },
+            { l: "Sleep (intake)",    v: client.intakeProfile.sleepQuality  ? client.intakeProfile.sleepQuality + " / 10"  : "—" },
+            { l: "Energy (intake)",   v: client.intakeProfile.energyLevel   ? client.intakeProfile.energyLevel + " / 10"   : "—" },
+            { l: "Fatigue (intake)",  v: client.intakeProfile.fatigueLevel  ? client.intakeProfile.fatigueLevel + " / 10"  : "—" },
+            { l: "Consistency",       v: client.intakeProfile.consistency   ? client.intakeProfile.consistency + " / 10"   : "—" },
+            { l: "Medications",       v: client.intakeProfile.medications        || "—" },
+            { l: "Medical conditions",v: client.intakeProfile.medicalConditions  || "—" },
+            { l: "Past injuries",     v: client.intakeProfile.pastInjuries       || "—" },
+            { l: "Current pain",      v: client.intakeProfile.currentPain        || "—" },
+          ].map(item => (
+            <div key={item.l} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "0.5px solid var(--color-border-tertiary)", fontSize: 13 }}>
+              <span style={{ color: "var(--color-text-secondary)", flexShrink: 0 }}>{item.l}</span>
+              <span style={{ fontWeight: 400, maxWidth: 260, textAlign: "right" }}>{item.v || "—"}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -132,11 +314,11 @@ function ClientDetail({ client, onClose }) {
 }
 
 export default function SPLCoachDashboard() {
-  const [clients, setClients]           = useState([]);
-  const [loading, setLoading]           = useState(true);
+  const [clients, setClients]               = useState([]);
+  const [loading, setLoading]               = useState(true);
   const [selectedClient, setSelectedClient] = useState(null);
-  const [filter, setFilter]             = useState("all");
-  const [sortBy, setSortBy]             = useState("state");
+  const [filter, setFilter]                 = useState("all");
+  const [sortBy, setSortBy]                 = useState("state");
 
   useEffect(() => {
     fetch(`${DEPLOYMENT_URL}?action=getAllClients`)
@@ -158,15 +340,17 @@ export default function SPLCoachDashboard() {
   const flags    = clients.filter(c => c.flag);
   const filtered = clients
     .filter(c => filter === "all" || c.tag === filter)
-    .sort((a, b) => sortBy === "state" ? b.stateScore - a.stateScore
-                  : sortBy === "compliance" ? b.complianceScore - a.complianceScore
-                  : b.weeks - a.weeks);
+    .sort((a, b) =>
+      sortBy === "state"      ? b.stateScore - a.stateScore :
+      sortBy === "compliance" ? b.complianceScore - a.complianceScore :
+                                b.weeks - a.weeks
+    );
 
   const avgState      = clients.length ? (clients.reduce((s, c) => s + c.stateScore, 0) / clients.length).toFixed(1) : "0.0";
   const avgCompliance = clients.length ? (clients.reduce((s, c) => s + c.complianceScore, 0) / clients.length).toFixed(1) : "0.0";
 
   return (
-    <div style={{ fontFamily: "var(--font-sans)", maxWidth: 680, margin: "0 auto", padding: "1.5rem 0" }}>
+    <div style={{ fontFamily: "var(--font-sans)", maxWidth: 720, margin: "0 auto", padding: "1.5rem 0" }}>
 
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
@@ -176,7 +360,7 @@ export default function SPLCoachDashboard() {
         </p>
       </div>
 
-      {/* Summary metrics */}
+      {/* Summary */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
         {[
           { l: "Active clients",  v: clients.length, unit: "" },
@@ -210,7 +394,8 @@ export default function SPLCoachDashboard() {
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {["all", "excellent", "on-track", "needs-attention", "at-risk"].map(f => (
           <button key={f} onClick={() => setFilter(f)} style={{
-            fontSize: 12, padding: "5px 12px", fontWeight: filter === f ? 500 : 400,
+            fontSize: 12, padding: "5px 12px",
+            fontWeight: filter === f ? 500 : 400,
             background: filter === f ? "var(--color-background-secondary)" : "none",
             borderColor: filter === f ? "var(--color-border-primary)" : "var(--color-border-tertiary)",
             textTransform: "capitalize", cursor: "pointer",
@@ -235,17 +420,22 @@ export default function SPLCoachDashboard() {
       )}
 
       {/* Client list */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+      <div style={{ display: "flex", flexDirection: "column" }}>
         {filtered.length > 0 && (
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 60px 60px 80px", gap: 8, padding: "6px 14px", fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 500 }}>
-            <span>Client</span><span>State</span><span>Compliance</span>
-            <span>Status</span><span>Wt trend</span><span>Wk</span><span>Last check-in</span>
+            <span>Client</span>
+            <span>State</span>
+            <span>Compliance</span>
+            <span>Status</span>
+            <span>Wt trend</span>
+            <span>Wk</span>
+            <span>Last check-in</span>
           </div>
         )}
 
         {filtered.map(client => {
-          const isOpen   = selectedClient === client.id;
-          const wtDelta  = client.weight.length > 1
+          const isOpen  = selectedClient === client.id;
+          const wtDelta = client.weight.length > 1
             ? client.weight[client.weight.length - 1] - client.weight[0] : 0;
           return (
             <div key={client.id}>
@@ -260,7 +450,9 @@ export default function SPLCoachDashboard() {
               >
                 <div>
                   <p style={{ fontSize: 13, fontWeight: 500, margin: "0 0 1px" }}>{client.name}</p>
-                  <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: 0 }}>{client.id} · {client.goal || "—"}</p>
+                  <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: 0 }}>
+                    {client.id} · {client.goal || "—"}
+                  </p>
                 </div>
                 <ScoreBadge value={client.stateScore} />
                 <ScoreBadge value={client.complianceScore} />
@@ -271,7 +463,12 @@ export default function SPLCoachDashboard() {
                   {client.lastCheckin ? String(client.lastCheckin).slice(5) : "—"}
                 </span>
               </div>
-              {isOpen && <ClientDetail client={client} onClose={() => setSelectedClient(null)} />}
+              {isOpen && (
+                <ClientDetail
+                  client={client}
+                  onClose={() => setSelectedClient(null)}
+                />
+              )}
             </div>
           );
         })}
